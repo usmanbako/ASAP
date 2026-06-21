@@ -15,7 +15,7 @@ internal class P1_Graven1_StackSpread : SplatoonScript
 {
     #region Metadata
 
-    public override Metadata? Metadata => new(1, "ASAP");
+    public override Metadata? Metadata => new(2, "ASAP");
     public override HashSet<uint>? ValidTerritories => [TerritoryDmad];
 
     #endregion
@@ -66,6 +66,10 @@ internal class P1_Graven1_StackSpread : SplatoonScript
     private KefkaVfx _kefkaVfx = KefkaVfx.None;
     private PlayerVfx _playerVfx = PlayerVfx.None;
     private Solution _solution = Solution.None;
+
+    // Debug aid: every distinct m0462trg lockon code seen this pull, so the real telegraph codes
+    // can be read from the settings window even before detection is wired up correctly.
+    private readonly List<string> _seenLockonVfx = [];
 
     #endregion
 
@@ -153,7 +157,7 @@ internal class P1_Graven1_StackSpread : SplatoonScript
                 _gravenImageCount++;
                 ClearActive();
                 break;
-            case CastMysteryMagic when _gravenImageCount == 1:
+            case CastMysteryMagic:
                 _active = true;
                 break;
         }
@@ -161,6 +165,8 @@ internal class P1_Graven1_StackSpread : SplatoonScript
 
     public override void OnVFXSpawn(uint target, string vfxPath)
     {
+        RecordLockonVfx(vfxPath);
+
         if(!_active) return;
 
         if(_playerVfx == PlayerVfx.None && TryMapPlayerVfx(vfxPath, out var playerVfx))
@@ -218,11 +224,26 @@ internal class P1_Graven1_StackSpread : SplatoonScript
         ImGui.TextUnformatted($"Boss telegraph: {_kefkaVfx}");
         ImGui.TextUnformatted($"Player telegraph: {_playerVfx}");
         ImGui.TextUnformatted($"Resolution: {_solution}");
+        ImGui.TextUnformatted($"Lockon VFX seen: {(_seenLockonVfx.Count == 0 ? "(none)" : string.Join(", ", _seenLockonVfx))}");
     }
 
     #endregion
 
     #region Private Method
+
+    // Remember distinct lockon telegraph codes (e.g. m0462trg_c03c.avfx) for diagnostics.
+    private void RecordLockonVfx(string vfxPath)
+    {
+        if(!vfxPath.Contains("m0462trg")) return;
+
+        var code = vfxPath;
+        var slash = code.LastIndexOf('/');
+        if(slash >= 0 && slash + 1 < code.Length) code = code[(slash + 1)..];
+
+        if(_seenLockonVfx.Contains(code)) return;
+        _seenLockonVfx.Add(code);
+        if(_seenLockonVfx.Count > 16) _seenLockonVfx.RemoveAt(0);
+    }
 
     private void RegisterPreview(string name, float x, float z, string label)
         => Controller.RegisterElementFromCode(
@@ -243,6 +264,7 @@ internal class P1_Graven1_StackSpread : SplatoonScript
     private void ResetState()
     {
         _gravenImageCount = 0;
+        _seenLockonVfx.Clear();
         ClearActive();
         DisableAllElements();
         Controller.Hide();
